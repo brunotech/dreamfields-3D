@@ -23,16 +23,8 @@ class NeRFNetwork(NeRFRenderer):
 
         sigma_net = []
         for l in range(num_layers):
-            if l == 0:
-                in_dim = self.in_dim
-            else:
-                in_dim = hidden_dim
-            
-            if l == num_layers - 1:
-                out_dim = 4
-            else:
-                out_dim = hidden_dim
-            
+            in_dim = self.in_dim if l == 0 else hidden_dim
+            out_dim = 4 if l == num_layers - 1 else hidden_dim
             sigma_net.append(nn.Linear(in_dim, out_dim, bias=False))
 
         self.sigma_net = nn.ModuleList(sigma_net)

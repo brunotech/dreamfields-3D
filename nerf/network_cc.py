@@ -31,21 +31,21 @@ class NeRFNetwork(NeRFRenderer):
 
         # line
         self.U = nn.ParameterList()
-        for i in range(len(self.vec_ids)):
-            vec_id = self.vec_ids[i]
+        for vec_id_ in self.vec_ids:
+            vec_id = vec_id_
             self.U.append(nn.Parameter(torch.randn(1, rank_line, resolution[vec_id], 1) * 0.1)) # [1, R, H, 1]
 
         # plane
         self.V = nn.ParameterList()
-        for i in range(len(self.mat_ids)):
-            mat_id_0, mat_id_1 = self.mat_ids[i]
+        for mat_id in self.mat_ids:
+            mat_id_0, mat_id_1 = mat_id
             self.V.append(nn.Parameter(torch.randn(1, rank_plane, resolution[mat_id_1], resolution[mat_id_0]) * 0.1)) # [1, R, H, W]
 
         # singular values (for line and plane, separately)
         self.S = nn.ParameterList()
         self.S.append(nn.Parameter(torch.ones(self.out_dim, rank_line)))
         self.S.append(nn.Parameter(torch.ones(self.out_dim, rank_plane)))
-        
+
         torch.nn.init.kaiming_normal_(self.S[0].data)
         torch.nn.init.kaiming_normal_(self.S[1].data)
 
@@ -55,11 +55,9 @@ class NeRFNetwork(NeRFRenderer):
         # y: transformed x in oid's coordinate system, and normalized into [-1, 1]
 
         #x = x + self.origin
-    
+
         aabb = self.aabb_train if self.training else self.aabb_infer
-        y = 2 * (x - aabb[:3]) / (aabb[3:] - aabb[:3]) - 1 # in [-1, 1] (may have outliers, but no matter since grid_sample use zero padding.)
-    
-        return y
+        return 2 * (x - aabb[:3]) / (aabb[3:] - aabb[:3]) - 1
 
     
     def get_feat(self, x):
@@ -71,25 +69,23 @@ class NeRFNetwork(NeRFRenderer):
         vec_coord = torch.stack((torch.zeros_like(vec_coord), vec_coord), dim=-1).detach().view(3, -1, 1, 2) # [3, N, 1, 2], fake 2d coord
 
         mat_coord = torch.stack((x[..., self.mat_ids[0]], x[..., self.mat_ids[1]], x[..., self.mat_ids[2]])).detach().view(3, -1, 1, 2) # [3, N, 1, 2]
-    
+
 
         vec_feat = F.grid_sample(self.U[0], vec_coord[[0]], align_corners=True).view(-1, N) * \
-                   F.grid_sample(self.U[1], vec_coord[[1]], align_corners=True).view(-1, N) * \
-                   F.grid_sample(self.U[2], vec_coord[[2]], align_corners=True).view(-1, N) # [R1, N]
+                       F.grid_sample(self.U[1], vec_coord[[1]], align_corners=True).view(-1, N) * \
+                       F.grid_sample(self.U[2], vec_coord[[2]], align_corners=True).view(-1, N) # [R1, N]
 
         mat_feat = F.grid_sample(self.V[0], mat_coord[[0]], align_corners=True).view(-1, N) * \
-                   F.grid_sample(self.V[1], mat_coord[[1]], align_corners=True).view(-1, N) * \
-                   F.grid_sample(self.V[2], mat_coord[[2]], align_corners=True).view(-1, N) # [R2, N]
-        
+                       F.grid_sample(self.V[1], mat_coord[[1]], align_corners=True).view(-1, N) * \
+                       F.grid_sample(self.V[2], mat_coord[[2]], align_corners=True).view(-1, N) # [R2, N]
+
         S_vec = self.S[0]
         S_mat = self.S[1]
 
         vec_feat = S_vec @ vec_feat # [out_dim, N]
         mat_feat = S_mat @ mat_feat # [out_dim, N]
 
-        hybrid_feat = (vec_feat + mat_feat).T.contiguous() # [out_dim, N] --> [N, out_dim]
-
-        return hybrid_feat
+        return (vec_feat + mat_feat).T.contiguous()
 
     def density(self, x):
         # x: [N, 3], in [-bound, bound]
@@ -113,16 +109,14 @@ class NeRFNetwork(NeRFRenderer):
         N = x.shape[0]
 
         h = feat[..., 1:] # [N, 3]
-        rgbs = torch.sigmoid(h)
-
-        return rgbs
+        return torch.sigmoid(h)
 
     # L1 penalty for loss
     def density_loss(self):
-        loss = 0
-        for i in range(len(self.U)):
-            loss += torch.mean(torch.abs(self.U[i])) + torch.mean(torch.abs(self.V[i]))
-        return loss
+        return sum(
+            torch.mean(torch.abs(self.U[i])) + torch.mean(torch.abs(self.V[i]))
+            for i in range(len(self.U))
+        )
     
 
     @torch.no_grad()

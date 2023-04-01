@@ -35,7 +35,6 @@ if __name__ == '__main__':
     parser.add_argument('--clip_model', type=str, default='ViT-B/16',help="the clip applied")
     parser.add_argument('--clip_aug', action='store_true', help="use random augmentation for the render iamge before feed into clip")
     parser.add_argument('--rnd_fovy', action='store_true', help="use random fovy (view angle in traning")
-     ### test options
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--save_video', action='store_true', help="save video in testing")
     parser.add_argument('--save_mesh', action='store_true', help="save video in testing")
@@ -68,8 +67,8 @@ if __name__ == '__main__':
 
     opt = parser.parse_args()
 
-    assert not (opt.text is None and opt.image is None)
-    
+    assert opt.text is not None or opt.image is not None
+        
 
     # if opt.cc:
     #     from nerf.network_cc import NeRFNetwork
@@ -78,7 +77,7 @@ if __name__ == '__main__':
 
     print(opt)
     if opt.seed == -1:
-        opt.seed = random.sample(range(0,np.iinfo(np.int32).max),1)[0]
+        opt.seed = random.sample(range(np.iinfo(np.int32).max), 1)[0]
     seed_everything(opt.seed)
 
     model = NeRFNetwork(
@@ -98,13 +97,13 @@ if __name__ == '__main__':
             from nerf.gui import NeRFGUI
             gui = NeRFGUI(opt, trainer)
             gui.render()
-        
+
         else:
             test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, radius=opt.radius, fovy=opt.fovy, size=opt.test_samples).dataloader()
             if opt.save_mesh:
                 trainer.save_mesh(resolution=opt.mesh_res, threshold=opt.mesh_trh)
             trainer.test(test_loader, write_video=opt.save_video) # test and save video
-    
+
     else:
 
         optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
@@ -122,7 +121,7 @@ if __name__ == '__main__':
 
             gui = NeRFGUI(opt, trainer)
             gui.render()
-        
+
         else:
             valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, radius=opt.radius, fovy=opt.fovy, size=opt.val_samples).dataloader()
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)

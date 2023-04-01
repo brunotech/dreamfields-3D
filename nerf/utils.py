@@ -274,15 +274,11 @@ class Trainer(object):
         clip_model.eval()
         for p in clip_model.parameters():
             p.requires_grad = False
-        
+
         self.clip_model = clip_model
         self.clip_preprocess = clip_preprocess
-      
-        if self.opt.clip_model =="ViT-L/14@336px":
-            crop_size = 336
-        else:
-            crop_size = 224
 
+        crop_size = 336 if self.opt.clip_model =="ViT-L/14@336px" else 224
         # image augmentation https://pytorch.org/vision/main/transforms.html
         if self.opt.clip_aug:
             self.aug = T.Compose([
@@ -299,7 +295,7 @@ class Trainer(object):
                 T.Resize((crop_size, crop_size)),
                 T.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
             ])
-        
+
         #the gaussian blur is only used for bg augmentation not for image itself
         self.gaussian_blur = T.GaussianBlur(15, sigma=(0.1, 10))
         # T.RandomAdjustSharpness(1+ramdom.random(), 0.9)
@@ -327,7 +323,7 @@ class Trainer(object):
             self.text_z = self.text_z / self.text_z.norm(dim=-1, keepdim=True)
         else:
             self.text_z = None
-        
+
         # ref image prompt
         ref_image_path = self.opt.image
         if ref_image_path is not None:
@@ -383,7 +379,7 @@ class Trainer(object):
         if self.opt.output_dir is not None:
             os.makedirs(self.opt.output_dir, exist_ok=True)
             os.chdir(self.opt.output_dir)
-            self.current_dir = os.getcwd().replace('\\','/')   
+            self.current_dir = os.getcwd().replace('\\','/')
         if self.workspace is not None:
             os.makedirs(self.workspace, exist_ok=True)        
             self.log_path = os.path.join(workspace, f"log_{self.name}.txt")
@@ -392,9 +388,11 @@ class Trainer(object):
             self.ckpt_path = os.path.join(self.workspace, 'checkpoints')
             self.best_path = f"{self.ckpt_path}/{self.name}.pth.tar"
             os.makedirs(self.ckpt_path, exist_ok=True)
-        self.log(f"[INFO] Training parameters:  {self.opt}")    
+        self.log(f"[INFO] Training parameters:  {self.opt}")
         self.log(f'[INFO] Trainer: {self.name} | {self.time_stamp} | {self.device} | {"fp16" if self.fp16 else "fp32"} | {self.workspace}')
-        self.log(f'[INFO] #parameters: {sum([p.numel() for p in model.parameters() if p.requires_grad])}')
+        self.log(
+            f'[INFO] #parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}'
+        )
 
         if self.workspace is not None:
             if self.use_checkpoint == "scratch":
@@ -435,10 +433,10 @@ class Trainer(object):
         valid_files = [os.path.join(dirpath, filename) for filename in os.listdir(dirpath)]
         # filter out directories, no-extension, and wrong extension files
         valid_files = [f for f in valid_files if '.' in f and \
-            f.rsplit('.',1)[-1] in valid_extensions and os.path.isfile(f)]
+                f.rsplit('.',1)[-1] in valid_extensions and os.path.isfile(f)]
 
         if not valid_files:
-            raise ValueError("No valid images in %s" % dirpath)
+            raise ValueError(f"No valid images in {dirpath}")
         # valid_files.sort(key=os.path.getmtime,reverse=True)
         valid_files = sorted(valid_files)
         return valid_files

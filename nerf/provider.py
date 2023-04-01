@@ -17,14 +17,15 @@ from .utils import get_rays
 
 # ref: https://github.com/NVlabs/instant-ngp/blob/b76004c8cf478880227401ae763be4c02f80b62f/include/neural-graphics-primitives/nerf_loader.h#L50
 def nerf_matrix_to_ngp(pose, scale=0.33):
-    # for the fox dataset, 0.33 scales camera radius to ~ 2
-    new_pose = np.array([
-        [pose[1, 0], -pose[1, 1], -pose[1, 2], pose[1, 3] * scale],
-        [pose[2, 0], -pose[2, 1], -pose[2, 2], pose[2, 3] * scale],
-        [pose[0, 0], -pose[0, 1], -pose[0, 2], pose[0, 3] * scale],
-        [0, 0, 0, 1],
-    ], dtype=np.float32)
-    return new_pose
+    return np.array(
+        [
+            [pose[1, 0], -pose[1, 1], -pose[1, 2], pose[1, 3] * scale],
+            [pose[2, 0], -pose[2, 1], -pose[2, 2], pose[2, 3] * scale],
+            [pose[0, 0], -pose[0, 1], -pose[0, 2], pose[0, 3] * scale],
+            [0, 0, 0, 1],
+        ],
+        dtype=np.float32,
+    )
 
 
 def visualize_poses(poses, size=0.1):

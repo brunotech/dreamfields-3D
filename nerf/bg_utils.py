@@ -54,8 +54,7 @@ def _linear_correlate_color(t):
   t_flat = np.reshape(t, [-1, 3])
   color_correlation_normalized = (color_correlation_svd_sqrt / max_norm_svd_sqrt)
   t_flat = np.matmul(t_flat, color_correlation_normalized.T)
-  t_correlated = np.reshape(t_flat, t.shape)
-  return t_correlated
+  return np.reshape(t_flat, t.shape)
 
 
 def constrain_l_inf(x):
@@ -87,10 +86,7 @@ def to_valid_rgb(t, decorrelated=False, sigmoid=True):
   if decorrelated and not sigmoid:
     t += color_mean
 
-  if sigmoid:
-    return torch.sigmoid(t)
-
-  return constrain_l_inf(2 * t - 1) / 2 + 0.5
+  return torch.sigmoid(t) if sigmoid else constrain_l_inf(2 * t - 1) / 2 + 0.5
 
 
 def rfft2d_freqs(h, w):

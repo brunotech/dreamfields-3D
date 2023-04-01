@@ -116,37 +116,37 @@ class NeRFGUI:
     def test_step(self):
         # TODO: seems we have to move data from GPU --> CPU --> GPU?
 
-        if self.need_update or self.spp < self.opt.max_spp:
-        
-            starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
-            starter.record()
+        if not self.need_update and self.spp >= self.opt.max_spp:
+            return
+        starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+        starter.record()
 
-            outputs = self.trainer.test_gui(self.cam.pose, self.cam.intrinsics, self.W, self.H, self.bg_color, self.spp, self.downscale)
+        outputs = self.trainer.test_gui(self.cam.pose, self.cam.intrinsics, self.W, self.H, self.bg_color, self.spp, self.downscale)
 
-            ender.record()
-            torch.cuda.synchronize()
-            t = starter.elapsed_time(ender)
+        ender.record()
+        torch.cuda.synchronize()
+        t = starter.elapsed_time(ender)
 
-            # update dynamic resolution
-            if self.dynamic_resolution:
-                # max allowed infer time per-frame is 200 ms
-                full_t = t / (self.downscale ** 2)
-                downscale = min(1, max(1/4, math.sqrt(200 / full_t)))
-                if downscale > self.downscale * 1.2 or downscale < self.downscale * 0.8:
-                    self.downscale = downscale
+        # update dynamic resolution
+        if self.dynamic_resolution:
+            # max allowed infer time per-frame is 200 ms
+            full_t = t / (self.downscale ** 2)
+            downscale = min(1, max(1/4, math.sqrt(200 / full_t)))
+            if downscale > self.downscale * 1.2 or downscale < self.downscale * 0.8:
+                self.downscale = downscale
 
-            if self.need_update:
-                self.render_buffer = outputs['image']
-                self.spp = 1
-                self.need_update = False
-            else:
-                self.render_buffer = (self.render_buffer * self.spp + outputs['image']) / (self.spp + 1)
-                self.spp += 1
+        if self.need_update:
+            self.render_buffer = outputs['image']
+            self.spp = 1
+            self.need_update = False
+        else:
+            self.render_buffer = (self.render_buffer * self.spp + outputs['image']) / (self.spp + 1)
+            self.spp += 1
 
-            dpg.set_value("_log_infer_time", f'{t:.4f}ms')
-            dpg.set_value("_log_resolution", f'{int(self.downscale * self.W)}x{int(self.downscale * self.H)}')
-            dpg.set_value("_log_spp", self.spp)
-            dpg.set_value("_texture", self.render_buffer)
+        dpg.set_value("_log_infer_time", f'{t:.4f}ms')
+        dpg.set_value("_log_resolution", f'{int(self.downscale * self.W)}x{int(self.downscale * self.H)}')
+        dpg.set_value("_log_spp", self.spp)
+        dpg.set_value("_texture", self.render_buffer)
 
         
     def register_dpg(self):
@@ -171,9 +171,9 @@ class NeRFGUI:
 
             # text prompt
             if self.opt.text is not None:
-                dpg.add_text("text: " + self.opt.text, tag="_log_prompt_text")
+                dpg.add_text(f"text: {self.opt.text}", tag="_log_prompt_text")
             if self.opt.image is not None:
-                dpg.add_text("ref image: " + self.opt.image, tag="_log_prompt_image")
+                dpg.add_text(f"ref image: {self.opt.image}", tag="_log_prompt_image")
 
             # button theme
             with dpg.theme() as theme_button:
@@ -193,7 +193,7 @@ class NeRFGUI:
             with dpg.group(horizontal=True):
                 dpg.add_text("Infer time: ")
                 dpg.add_text("no data", tag="_log_infer_time")
-            
+
             with dpg.group(horizontal=True):
                 dpg.add_text("SPP: ")
                 dpg.add_text("1", tag="_log_spp")
@@ -245,19 +245,23 @@ class NeRFGUI:
                     # save mesh
                     with dpg.group(horizontal=True):
                         dpg.add_text("Marching Cubes: ")
-                        
+
                     def callback_mesh(sender, app_data):
-                            self.trainer.save_mesh(resolution=self.mesh_resolution, threshold=self.mesh_threshold,)
-                            dpg.set_value("_log_mesh", "saved " + f'{self.trainer.name}_{self.trainer.epoch}.ply')
-                            self.trainer.epoch += 1 # use epoch to indicate different calls.
-                            
+                        self.trainer.save_mesh(resolution=self.mesh_resolution, threshold=self.mesh_threshold,)
+                        dpg.set_value(
+                            "_log_mesh",
+                            f'saved {self.trainer.name}_{self.trainer.epoch}.ply',
+                        )
+                        self.trainer.epoch += 1 # use epoch to indicate different calls.
+
                     def callback_set_threshold(sender, app_data):
                             self.mesh_threshold = app_data
                             self.need_update = True
-                        
+
                     def callback_set_resolution(sender, app_data):
                             self.mesh_resolution = app_data
                             self.need_update = True
+
                     with dpg.group(horizontal=True):  
                         dpg.add_slider_int(label="Mesh threshold", min_value=0, max_value=100, default_value=self.mesh_threshold, callback=callback_set_threshold)
                     with dpg.group(horizontal=True):    
@@ -271,7 +275,7 @@ class NeRFGUI:
                     with dpg.group(horizontal=True):
                         dpg.add_text("", tag="_log_train_log")
 
-            
+
             # rendering options
             with dpg.collapsing_header(label="Options", default_open=True):
 
@@ -334,7 +338,7 @@ class NeRFGUI:
                 with dpg.group(horizontal=True):
                     dpg.add_slider_float(label="z", width=150, min_value=-self.opt.bound, max_value=0, format="%.2f", default_value=-self.opt.bound, callback=callback_set_aabb, user_data=2)
                     dpg.add_slider_float(label="", width=150, min_value=0, max_value=self.opt.bound, format="%.2f", default_value=self.opt.bound, callback=callback_set_aabb, user_data=5)
-                
+
 
             # debug info
             if self.debug:
@@ -396,9 +400,9 @@ class NeRFGUI:
             dpg.add_mouse_wheel_handler(callback=callback_camera_wheel_scale)
             dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Middle, callback=callback_camera_drag_pan)
 
-        
+
         dpg.create_viewport(title='torch-ngp', width=self.W, height=self.H, resizable=False)
-        
+
         # TODO: seems dearpygui doesn't support resizing texture...
         # def callback_resize(sender, app_data):
         #     self.W = app_data[0]
@@ -414,7 +418,7 @@ class NeRFGUI:
                 dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 0, 0, category=dpg.mvThemeCat_Core)
                 dpg.add_theme_style(dpg.mvStyleVar_FramePadding, 0, 0, category=dpg.mvThemeCat_Core)
                 dpg.add_theme_style(dpg.mvStyleVar_CellPadding, 0, 0, category=dpg.mvThemeCat_Core)
-        
+
         dpg.bind_item_theme("_primary_window", theme_no_padding)
 
         dpg.setup_dearpygui()
